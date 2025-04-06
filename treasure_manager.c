@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <time.h>
 #define MAX_BUF 1024
 
 typedef struct
@@ -67,11 +68,43 @@ void addTreasure (char *huntID, char *inputFile)
     }
 }
 
+//Print at stdout or in a file? (for now, at stdout)
+
+void listHunt(char *huntID)
+{
+    struct stat st;
+    if (stat(huntID, &st) != 0) 
+        printf("Nu exista hunt-ul cu id-ul dat\n");
+    else
+    {
+        DIR *dirp = opendir(huntID); 
+        if (dirp)
+        {
+            char filep[256];
+            snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
+            int in = open(filep, O_RDONLY);
+            if (in)
+            {
+                stat(filep, &st);
+                char buff[100];
+                long int eet_time = st.st_mtim.tv_sec + 3*3600;  //adjusts time according to EET
+                strftime(buff, sizeof(buff), "%D %T", gmtime(&eet_time));
+                printf("Hunt name: %s, Total size: %ld bytes, Last modification: %s\n", huntID, st.st_size, buff);
+                int bytes_read;
+                while ((bytes_read = read(in, buff, sizeof(buff))))
+                    write(1, buff, bytes_read); //1 represents the stdout, if necessary will change output to a different file
+                close(in);
+            }
+            close(dirp);
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (strcmp(argv[1], "add") == 0)
-    {
         addTreasure(argv[2], argv[3]);
-    }
+    if (strcmp(argv[1], "list") == 0)
+        listHunt(argv[2]);
     return 0;
 }
