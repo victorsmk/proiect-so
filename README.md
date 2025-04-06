@@ -1,0 +1,1 @@
+Repo-ul pentru proiectul de Sisteme de Operare
