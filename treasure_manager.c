@@ -23,46 +23,46 @@ typedef struct
 //Where to get data for treasure?? (input file maybe for the moment?)
 //Can you add the same treasure twice?
 
-void addTreasure (char *huntID, char *inputFile)
+int addTreasure (char *huntID, char *inputFile)
 {
     Treasure_t treasure;
     int in = open(inputFile, O_RDONLY);
-    if (in)
-    {
-        struct stat st;
-        if (stat(huntID, &st) != 0)  //Checks if file with the given name exists, if not makes a directory with given name
-            mkdir(huntID, 0755);     //no point in checking if the file is a directory, since there are no directories in directories,
-                                     //and each treasure has to be inside a directory.
-        char buffer[MAX_BUF + 1];
-        int bytes_read = read(in, buffer, sizeof(buffer) - 1);  //It is considered that an input file only contains information for one treasure
-        buffer[bytes_read] = '\0';                              //since it's specified that you can only add a single treasure at a time
-        char *line = strtok(buffer, "\n");
-        if (line) 
-            strcpy(treasure.id, line);
-        line = strtok(NULL, "\n");
-        if (line) 
-            strcpy(treasure.username, line);                    //The function is pretty simple, just copies information from the input file to the buffer
-        line = strtok(NULL, "\n");                              //and writes it in the output file, which is the "treasures" file from the given hunt
-        if (line)
-            sscanf(line, "%s %s", treasure.lat, treasure.lon);
-        line = strtok(NULL, "\n");
-        if (line) 
-            strcpy(treasure.clue, line);
-        line = strtok(NULL, "\n");
-        if (line) 
-            strcpy(treasure.value, line);
-        char filep[256];
-        snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
-        int out = open(filep, O_APPEND | O_CREAT | O_WRONLY, 0644);
-        if (out)
-        {
-            char outbuf[MAX_BUF];
-            int len = snprintf(outbuf, sizeof(outbuf), "Treasure ID: %s\nUser: %s\nCoordinates: %s, %s\nClue: %s\nValue: %s\n", treasure.id, treasure.username, treasure.lat, treasure.lon, treasure.clue, treasure.value);
-            write(out, outbuf, len);
-            close(out);
-        }
-        close(in);
-    }
+    if (!in)
+        return -1;
+    struct stat st;
+    if (stat(huntID, &st) != 0)  //Checks if file with the given name exists, if not makes a directory with given name
+        mkdir(huntID, 0755);     //no point in checking if the file is a directory, since there are no directories in directories,
+                                    //and each treasure has to be inside a directory.
+    char buffer[MAX_BUF + 1];
+    int bytes_read = read(in, buffer, sizeof(buffer) - 1);  //It is considered that an input file only contains information for one treasure
+    buffer[bytes_read] = '\0';                              //since it's specified that you can only add a single treasure at a time
+    char *line = strtok(buffer, "\n");
+    if (line) 
+        strcpy(treasure.id, line);
+    line = strtok(NULL, "\n");
+    if (line) 
+        strcpy(treasure.username, line);                    //The function is pretty simple, just copies information from the input file to the buffer
+    line = strtok(NULL, "\n");                              //and writes it in the output file, which is the "treasures" file from the given hunt
+    if (line)
+        sscanf(line, "%s %s", treasure.lat, treasure.lon);
+    line = strtok(NULL, "\n");
+    if (line) 
+        strcpy(treasure.clue, line);
+    line = strtok(NULL, "\n");
+    if (line) 
+        strcpy(treasure.value, line);
+    char filep[256];
+    snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
+    int out = open(filep, O_APPEND | O_CREAT | O_WRONLY, 0644);
+    if (!out)
+        return -1;
+    char outbuf[MAX_BUF];
+    int len = snprintf(outbuf, sizeof(outbuf), "Treasure ID: %s\nUser: %s\nCoordinates: %s, %s\nClue: %s\nValue: %s\n", treasure.id, treasure.username, treasure.lat, treasure.lon, treasure.clue, treasure.value);
+    write(out, outbuf, len);
+    close(out);
+    close(in);
+    return 0;
+    
 }
 
 //Print at stdout or in a file? (for now, at stdout)
@@ -71,7 +71,7 @@ void listHunt(char *huntID)
 {
     struct stat st;
     if (stat(huntID, &st) != 0) 
-        printf("Nu exista hunt-ul cu id-ul dat\n");
+        printf("Nu exista hunt-ul %s\n", huntID);
     else
     {
         char filep[256];
@@ -135,32 +135,42 @@ void viewTreasure(char *huntID, char *treasureID)
     }
 }
 
-void removeHunt (char *huntID)
+int removeHunt (char *huntID)
 {
     DIR *dirp = opendir(huntID);
-    if (dirp)
+    if (!dirp)
+        return -1;
+    struct dirent *file;
+    char filep[300];
+    while ((file = readdir(dirp)) != NULL) //Works with one but also multiple files in the same directory
     {
-        struct dirent *file;
-        char filep[300];
-        while ((file = readdir(dirp)) != NULL) //Works with one but also multiple files in the same directory
-        {
-            if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) //Ignores the two default subdirectories of every directory
-                continue;
-            snprintf(filep, sizeof(filep), "%s/%s", huntID, file->d_name);
-            unlink(filep);
-        }
-        closedir(dirp);
-        rmdir(huntID);
+        if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) //Ignores the two default subdirectories of every directory
+            continue;
+        snprintf(filep, sizeof(filep), "%s/%s", huntID, file->d_name);
+        unlink(filep);
     }
+    closedir(dirp);
+    rmdir(huntID);
+    return 0;
 }
 
-//Maybe make all the functions return 0 on succes, -1 on failure
+//Dont think its necessary to make the printing functions return anything on success,
+//taking into account the fact that they will print information on success and not print on failure.
+//However, if the functions will be changed to write in a different file,
+//maybe also make them return some values
 
 int main(int argc, char **argv)
 {
     char yes_no;
+    int check;
     if (strcmp(argv[1], "add") == 0)
-        addTreasure(argv[2], argv[3]);
+    {
+        check = addTreasure(argv[2], argv[3]);
+        if (check == 0)
+            printf("Treasure added successfully to hunt %s\n", argv[2]);
+        else
+            printf("Error at adding treasure to hunt %s\n", argv[2]);
+    }
     if (strcmp(argv[1], "list") == 0)
         listHunt(argv[2]);
     if (strcmp(argv[1], "view") == 0)
@@ -170,7 +180,14 @@ int main(int argc, char **argv)
         printf("Are you sure you want to delete hunt %s?\n [y/n]  ", argv[2]);
         scanf("%c", &yes_no);
         if (yes_no == 'y')
-            removeHunt(argv[2]);
+        {
+            check = removeHunt(argv[2]);
+            if (check == 0)
+                printf("Hunt %s removed successfully\n", argv[2]);
+            else
+                printf("Error at removing hunt %s\n", argv[2]);
+
+        }
         else
             printf("Operation terminated\n");
     }
