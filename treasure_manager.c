@@ -100,11 +100,56 @@ void listHunt(char *huntID)
     }
 }
 
+//Also print at stdout for now, will change if needed
+
+void viewTreasure(char *huntID, char *treasureID)
+{
+    char filep[256];
+    snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
+    int in = open(filep, O_RDONLY);
+    if (in)
+    {
+        char buf[MAX_BUF + 1];
+        int bytesRead = read(in, buf, MAX_BUF);
+        buf[bytesRead] = '\0';
+        char *line = strtok(buf, "\n");
+        int found = 0;
+        while (line != NULL) 
+        {
+            if (strncmp(line, "Treasure ID:", 12) == 0) //This function assumes that each treasure is stored in the same format
+            {                                           
+                char id[32];
+                sscanf(line, "Treasure ID: %s", id);
+                if (strcmp(id, treasureID) == 0) 
+                {
+                    found = 1;
+                    printf("%s\n", line);
+                    for (int i = 0; i < 4; i++) 
+                    {
+                        line = strtok(NULL, "\n");
+                        if (line) 
+                            printf("%s\n", line);
+                    }
+                    break; //Also assumes there is only one treasure with a given ID
+                }          //If there can be multiple, just remove the break
+            }
+            line = strtok(NULL, "\n");
+        }
+
+        if (!found)
+            printf("Treasure with ID %s not found in hunt %s.\n", treasureID, huntID);
+        close(in);
+    }
+}
+
+
 int main(int argc, char **argv)
 {
     if (strcmp(argv[1], "add") == 0)
         addTreasure(argv[2], argv[3]);
     if (strcmp(argv[1], "list") == 0)
         listHunt(argv[2]);
+    if (strcmp(argv[1], "view") == 0)
+        viewTreasure(argv[2], argv[3]);
     return 0;
 }
