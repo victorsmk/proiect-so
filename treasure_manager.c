@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <time.h>
+#include <unistd.h>
 #define MAX_BUF 1024
 
 typedef struct
@@ -32,7 +33,7 @@ void addTreasure (char *huntID, char *inputFile)
         if (stat(huntID, &st) != 0)  //Checks if file with the given name exists, if not makes a directory with given name
             mkdir(huntID, 0755);     //no point in checking if the file is a directory, since there are no directories in directories,
                                      //and each treasure has to be inside a directory.
-        char buffer[MAX_BUF];
+        char buffer[MAX_BUF + 1];
         int bytes_read = read(in, buffer, sizeof(buffer) - 1);  //It is considered that an input file only contains information for one treasure
         buffer[bytes_read] = '\0';                              //since it's specified that you can only add a single treasure at a time
         char *line = strtok(buffer, "\n");
@@ -79,7 +80,7 @@ void listHunt(char *huntID)
         if (in)
         {
             stat(filep, &st);
-            char buff[100];
+            char buff[MAX_BUF];
             long int eet_time = st.st_mtim.tv_sec + 3*3600;  //adjusts time according to EET
             strftime(buff, sizeof(buff), "%D %T", gmtime(&eet_time));
             printf("Hunt name: %s, Total size: %ld bytes, Last modification: %s\n", huntID, st.st_size, buff);
@@ -134,14 +135,44 @@ void viewTreasure(char *huntID, char *treasureID)
     }
 }
 
+void removeHunt (char *huntID)
+{
+    DIR *dirp = opendir(huntID);
+    if (dirp)
+    {
+        struct dirent *file;
+        char filep[300];
+        while ((file = readdir(dirp)) != NULL) //Works with one but also multiple files in the same directory
+        {
+            if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) //Ignores the two default subdirectories of every directory
+                continue;
+            snprintf(filep, sizeof(filep), "%s/%s", huntID, file->d_name);
+            unlink(filep);
+        }
+        closedir(dirp);
+        rmdir(huntID);
+    }
+}
+
+//Maybe make all the functions return 0 on succes, -1 on failure
 
 int main(int argc, char **argv)
 {
+    char yes_no;
     if (strcmp(argv[1], "add") == 0)
         addTreasure(argv[2], argv[3]);
     if (strcmp(argv[1], "list") == 0)
         listHunt(argv[2]);
     if (strcmp(argv[1], "view") == 0)
         viewTreasure(argv[2], argv[3]);
+    if (strcmp(argv[1], "remove_hunt") == 0)
+    {
+        printf("Are you sure you want to delete hunt %s?\n [y/n]  ", argv[2]);
+        scanf("%c", &yes_no);
+        if (yes_no == 'y')
+            removeHunt(argv[2]);
+        else
+            printf("Operation terminated\n");
+    }
     return 0;
 }
