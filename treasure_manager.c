@@ -31,38 +31,34 @@ void addTreasure (char *huntID, char *inputFile)
         struct stat st;
         if (stat(huntID, &st) != 0)  //Checks if file with the given name exists, if not makes a directory with given name
             mkdir(huntID, 0755);     //no point in checking if the file is a directory, since there are no directories in directories,
-        DIR *dirp = opendir(huntID);    //and each treasure has to be inside a directory.
-        if (dirp)
+                                     //and each treasure has to be inside a directory.
+        char buffer[MAX_BUF];
+        int bytes_read = read(in, buffer, sizeof(buffer) - 1);  //It is considered that an input file only contains information for one treasure
+        buffer[bytes_read] = '\0';                              //since it's specified that you can only add a single treasure at a time
+        char *line = strtok(buffer, "\n");
+        if (line) 
+            strcpy(treasure.id, line);
+        line = strtok(NULL, "\n");
+        if (line) 
+            strcpy(treasure.username, line);                    //The function is pretty simple, just copies information from the input file to the buffer
+        line = strtok(NULL, "\n");                              //and writes it in the output file, which is the "treasures" file from the given hunt
+        if (line)
+            sscanf(line, "%s %s", treasure.lat, treasure.lon);
+        line = strtok(NULL, "\n");
+        if (line) 
+            strcpy(treasure.clue, line);
+        line = strtok(NULL, "\n");
+        if (line) 
+            strcpy(treasure.value, line);
+        char filep[256];
+        snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
+        int out = open(filep, O_APPEND | O_CREAT | O_WRONLY, 0644);
+        if (out)
         {
-            char buffer[MAX_BUF];
-            int bytes_read = read(in, buffer, sizeof(buffer) - 1);  //It is considered that an input file only contains information for one treasure
-            buffer[bytes_read] = '\0';                              //since it's specified that you can only add a single treasure at a time
-            char *line = strtok(buffer, "\n");
-            if (line) 
-                strcpy(treasure.id, line);
-            line = strtok(NULL, "\n");
-            if (line) 
-                strcpy(treasure.username, line);                    //The function is pretty simple, just copies information from the input file to the buffer
-            line = strtok(NULL, "\n");                              //and writes it in the output file, which is the "treasures" file from the given hunt
-            if (line)
-                sscanf(line, "%s %s", treasure.lat, treasure.lon);
-            line = strtok(NULL, "\n");
-            if (line) 
-                strcpy(treasure.clue, line);
-            line = strtok(NULL, "\n");
-            if (line) 
-                strcpy(treasure.value, line);
-            char filep[256];
-            snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
-            int out = open(filep, O_APPEND | O_CREAT | O_WRONLY, 0644);
-            if (out)
-            {
-                char outbuf[MAX_BUF];
-                int len = snprintf(outbuf, sizeof(outbuf), "Treasure ID: %s\nUser: %s\nCoordinates: %s, %s\nClue: %s\nValue: %s\n", treasure.id, treasure.username, treasure.lat, treasure.lon, treasure.clue, treasure.value);
-                write(out, outbuf, len);
-                close(out);
-            }
-            closedir(dirp);
+            char outbuf[MAX_BUF];
+            int len = snprintf(outbuf, sizeof(outbuf), "Treasure ID: %s\nUser: %s\nCoordinates: %s, %s\nClue: %s\nValue: %s\n", treasure.id, treasure.username, treasure.lat, treasure.lon, treasure.clue, treasure.value);
+            write(out, outbuf, len);
+            close(out);
         }
         close(in);
     }
@@ -77,26 +73,22 @@ void listHunt(char *huntID)
         printf("Nu exista hunt-ul cu id-ul dat\n");
     else
     {
-        DIR *dirp = opendir(huntID); 
-        if (dirp)
+        char filep[256];
+        snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
+        int in = open(filep, O_RDONLY);
+        if (in)
         {
-            char filep[256];
-            snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
-            int in = open(filep, O_RDONLY);
-            if (in)
-            {
-                stat(filep, &st);
-                char buff[100];
-                long int eet_time = st.st_mtim.tv_sec + 3*3600;  //adjusts time according to EET
-                strftime(buff, sizeof(buff), "%D %T", gmtime(&eet_time));
-                printf("Hunt name: %s, Total size: %ld bytes, Last modification: %s\n", huntID, st.st_size, buff);
-                int bytes_read;
-                while ((bytes_read = read(in, buff, sizeof(buff))))
-                    write(1, buff, bytes_read); //1 represents the stdout, if necessary will change output to a different file
-                close(in);
-            }
-            close(dirp);
+            stat(filep, &st);
+            char buff[100];
+            long int eet_time = st.st_mtim.tv_sec + 3*3600;  //adjusts time according to EET
+            strftime(buff, sizeof(buff), "%D %T", gmtime(&eet_time));
+            printf("Hunt name: %s, Total size: %ld bytes, Last modification: %s\n", huntID, st.st_size, buff);
+            int bytes_read;
+            while ((bytes_read = read(in, buff, sizeof(buff))))
+                write(1, buff, bytes_read); //1 represents the stdout, if necessary will change output to a different file
+            close(in);
         }
+        
     }
 }
 
