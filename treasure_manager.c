@@ -128,7 +128,6 @@ void viewTreasure(char *huntID, char *treasureID)
             }
             line = strtok(NULL, "\n");
         }
-
         if (!found)
             printf("Treasure with ID %s not found in hunt %s.\n", treasureID, huntID);
         close(in);
@@ -154,6 +153,63 @@ int removeHunt (char *huntID)
     return 0;
 }
 
+int removeTreasure(char *huntID, char *treasureID) 
+{
+    char filep[256], tempp[256];                                //If we dont want to leave empty lines, the easiest method is just to copy
+    snprintf(filep, sizeof(filep), "%s/treasures", huntID);     //all the information from the old file to the new one, and ignore the treasure
+    snprintf(tempp, sizeof(tempp), "%s/treasures_tmp", huntID); //that we want to delete
+    int in = open(filep, O_RDONLY);
+    if (!in)
+        return -1; 
+    int out = open(tempp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (!out)
+    {
+        close(in);
+        return -1;
+    }
+    char buffer[MAX_BUF + 1];
+    int bytesRead = read(in, buffer, MAX_BUF);
+    if (bytesRead <= 0) 
+    {
+        close(in); 
+        close(out);
+        return -1;
+    }
+    buffer[bytesRead] = '\0';
+    char *line = strtok(buffer, "\n");
+    int lineCount = 0;
+    char block[6][512]; //6 lines per treasure
+    while (line) 
+    {
+        strncpy(block[lineCount], line, sizeof(block[lineCount]) - 1);
+        block[lineCount][sizeof(block[lineCount]) - 1] = '\0';
+        lineCount++;
+        if (lineCount == 6) 
+        {
+            char id[64];
+            sscanf(block[0], "Treasure ID: %s", id);
+            if (strcmp(id, treasureID) != 0) // If not the one we're removing, write all 6 lines
+            {
+                for (int i = 0; i < 6; i++) 
+                {
+                    char lineOut[520];
+                    int len = snprintf(lineOut, sizeof(lineOut), "%s\n", block[i]);
+                    write(out, lineOut, len);
+                }
+            }
+            lineCount = 0;
+        }
+        line = strtok(NULL, "\n");
+    }
+
+    close(in);
+    close(out);
+
+    rename(tempp, filep); // Replace original file with the new one
+    unlink(tempp);
+    return 0;
+}
+
 //Dont think its necessary to make the printing functions return anything on success,
 //taking into account the fact that they will print information on success and not print on failure.
 //However, if the functions will be changed to write in a different file,
@@ -162,7 +218,7 @@ int removeHunt (char *huntID)
 int main(int argc, char **argv)
 {
     char yes_no;
-    int check;
+    int check = 1;
     if (strcmp(argv[1], "add") == 0)
     {
         check = addTreasure(argv[2], argv[3]);
@@ -175,6 +231,14 @@ int main(int argc, char **argv)
         listHunt(argv[2]);
     if (strcmp(argv[1], "view") == 0)
         viewTreasure(argv[2], argv[3]);
+    if(strcmp(argv[1], "remove_treasure") == 0)
+        {
+            check = removeTreasure(argv[2], argv[3]);
+            if(check == 0)
+                printf("Treasure %s removed successfully from hunt %s\n", argv[3], argv[2]);
+            else
+                printf("Error at removing treasure %s from hunt %s\n", argv[3], argv[2]);
+        }
     if (strcmp(argv[1], "remove_hunt") == 0)
     {
         printf("Are you sure you want to delete hunt %s?\n [y/n]  ", argv[2]);
