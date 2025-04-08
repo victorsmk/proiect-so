@@ -20,7 +20,7 @@ typedef struct
 
 }Treasure_t; //Structure used as a buffer for writing in a file
 
-//Where to get data for treasure?? (input file maybe for the moment?)
+//Where to get data for treasure?? (input file for the moment)
 //Can you add the same treasure twice?
 
 int addTreasure (char *huntID, char *inputFile)
@@ -30,8 +30,9 @@ int addTreasure (char *huntID, char *inputFile)
     if (!in)
         return -1;
     struct stat st;
-    if (stat(huntID, &st) != 0)  //Checks if file with the given name exists, if not makes a directory with given name
-        mkdir(huntID, 0755);     //no point in checking if the file is a directory, since there are no directories in directories,
+    if (stat(huntID, &st) != 0)
+         mkdir(huntID, 0755);   //Checks if file with the given name exists, if not makes a directory with given name
+                                 //no point in checking if the file is a directory, since there are no directories in directories,
                                     //and each treasure has to be inside a directory.
     char buffer[MAX_BUF + 1];
     int bytes_read = read(in, buffer, sizeof(buffer) - 1);  //It is considered that an input file only contains information for one treasure
@@ -55,12 +56,28 @@ int addTreasure (char *huntID, char *inputFile)
     snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
     int out = open(filep, O_APPEND | O_CREAT | O_WRONLY, 0644);
     if (!out)
+    {
+        close(in);
         return -1;
+    }
     char outbuf[MAX_BUF];
     int len = snprintf(outbuf, sizeof(outbuf), "Treasure ID: %s\nUser: %s\nCoordinates: %s, %s\nClue: %s\nValue: %s\n", treasure.id, treasure.username, treasure.lat, treasure.lon, treasure.clue, treasure.value);
     write(out, outbuf, len);
+    char logp[256];
+    snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+    int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    if (!flog)
+    {
+        close(in);
+        close(out);
+        return -1;
+    }
+    char log[MAX_BUF];
+    len = snprintf(log, sizeof(log), "added %s to %s\n", treasure.id, huntID);
+    write(flog, log, len);
     close(out);
     close(in);
+    close(flog);
     return 0;
     
 }
@@ -87,6 +104,18 @@ void listHunt(char *huntID)
             int bytes_read;
             while ((bytes_read = read(in, buff, sizeof(buff))))
                 write(1, buff, bytes_read); //1 represents the stdout, if necessary will change output to a different file
+            char logp[256];
+            snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+            int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
+            if (!flog)
+            {
+                close(in);
+                return;
+            }
+            char log[MAX_BUF];
+            int len = snprintf(log, sizeof(log), "listed this hunt\n");
+            write(flog, log, len);
+            close(flog);
             close(in);
         }
         
@@ -130,6 +159,21 @@ void viewTreasure(char *huntID, char *treasureID)
         }
         if (!found)
             printf("Treasure with ID %s not found in hunt %s.\n", treasureID, huntID);
+        else
+        {
+            char logp[256];
+            snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+            int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
+            if (!flog)
+            {
+                close(in);
+                return;
+            }
+            char log[MAX_BUF];
+            int len = snprintf(log, sizeof(log), "viewed treasure %s from this hunt\n", treasureID);
+            write(flog, log, len);
+            close(flog);
+        }
         close(in);
     }
 }
@@ -140,13 +184,15 @@ int removeHunt (char *huntID)
     if (!dirp)
         return -1;
     struct dirent *file;
-    char filep[300];
+    char filep[300], logp[300];
     while ((file = readdir(dirp)) != NULL) //Works with one but also multiple files in the same directory
     {
         if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) //Ignores the two default subdirectories of every directory
             continue;
         snprintf(filep, sizeof(filep), "%s/%s", huntID, file->d_name);
+        snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
         unlink(filep);
+        unlink(logp);
     }
     closedir(dirp);
     rmdir(huntID);
@@ -161,7 +207,7 @@ int removeTreasure(char *huntID, char *treasureID)
     int in = open(filep, O_RDONLY);
     if (!in)
         return -1; 
-    int out = open(tempp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int out = open(tempp, O_WRONLY | O_CREAT, 0644);
     if (!out)
     {
         close(in);
@@ -201,12 +247,19 @@ int removeTreasure(char *huntID, char *treasureID)
         }
         line = strtok(NULL, "\n");
     }
-
     close(in);
     close(out);
-
     rename(tempp, filep); // Replace original file with the new one
     unlink(tempp);
+    char logp[256];
+    snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+    int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    if (!flog)
+        return -1;
+    char log[MAX_BUF];
+    int len = snprintf(log, sizeof(log), "removed treasure %s from this hunt\n", treasureID);
+    write(flog, log, len);
+    close(flog);
     return 0;
 }
 
@@ -214,6 +267,10 @@ int removeTreasure(char *huntID, char *treasureID)
 //taking into account the fact that they will print information on success and not print on failure.
 //However, if the functions will be changed to write in a different file,
 //maybe also make them return some values
+
+//For the logged_hunt maybe also add the time of each command
+//Also is it just the attempted operation? Or does it have to be successful? (for now, it has to be successful)
+//Maybe also make the functions return different values depending on type of error
 
 int main(int argc, char **argv)
 {
