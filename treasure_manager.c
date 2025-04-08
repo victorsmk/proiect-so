@@ -23,6 +23,22 @@ typedef struct
 //Where to get data for treasure?? (input file for the moment)
 //Can you add the same treasure twice?
 
+int createSymLink(char *huntID)
+{
+    char linkp[256];
+    snprintf(linkp, sizeof(linkp), "logged_hunt-%s", huntID);
+    struct stat st;
+    if (lstat(linkp, &st) == 0) 
+        return 1;
+    char target[256];
+    snprintf(target, sizeof(target), "%s/logged_hunt.txt", huntID);
+    if (symlink(target, linkp) == 0)
+        return 0;
+     else 
+        return -1;
+}
+
+
 int addTreasure (char *huntID, char *inputFile)
 {
     Treasure_t treasure;
@@ -64,7 +80,7 @@ int addTreasure (char *huntID, char *inputFile)
     int len = snprintf(outbuf, sizeof(outbuf), "Treasure ID: %s\nUser: %s\nCoordinates: %s, %s\nClue: %s\nValue: %s\n", treasure.id, treasure.username, treasure.lat, treasure.lon, treasure.clue, treasure.value);
     write(out, outbuf, len);
     char logp[256];
-    snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+    snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt.txt");
     int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (!flog)
     {
@@ -75,6 +91,8 @@ int addTreasure (char *huntID, char *inputFile)
     char log[MAX_BUF];
     len = snprintf(log, sizeof(log), "added %s to %s\n", treasure.id, huntID);
     write(flog, log, len);
+    if (createSymLink(huntID) < 0)
+        return -1;
     close(out);
     close(in);
     close(flog);
@@ -105,7 +123,7 @@ void listHunt(char *huntID)
             while ((bytes_read = read(in, buff, sizeof(buff))))
                 write(1, buff, bytes_read); //1 represents the stdout, if necessary will change output to a different file
             char logp[256];
-            snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+            snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt.txt");
             int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
             if (!flog)
             {
@@ -126,6 +144,9 @@ void listHunt(char *huntID)
 
 void viewTreasure(char *huntID, char *treasureID)
 {
+    struct stat st;
+    if (stat(huntID, &st) != 0) 
+        printf("Nu exista hunt-ul %s\n", huntID);
     char filep[256];
     snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
     int in = open(filep, O_RDONLY);
@@ -162,7 +183,7 @@ void viewTreasure(char *huntID, char *treasureID)
         else
         {
             char logp[256];
-            snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+            snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt.txt");
             int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
             if (!flog)
             {
@@ -184,15 +205,17 @@ int removeHunt (char *huntID)
     if (!dirp)
         return -1;
     struct dirent *file;
-    char filep[300], logp[300];
+    char filep[300], logp[300], linkp[300];
     while ((file = readdir(dirp)) != NULL) //Works with one but also multiple files in the same directory
     {
         if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) //Ignores the two default subdirectories of every directory
             continue;
         snprintf(filep, sizeof(filep), "%s/%s", huntID, file->d_name);
-        snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+        snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt.txt");
+        snprintf(linkp, sizeof(linkp), "%s-%s", "logged_hunt", huntID);
         unlink(filep);
         unlink(logp);
+        unlink(linkp);
     }
     closedir(dirp);
     rmdir(huntID);
@@ -201,6 +224,9 @@ int removeHunt (char *huntID)
 
 int removeTreasure(char *huntID, char *treasureID) 
 {
+    struct stat st;
+    if (stat(huntID, &st) != 0) 
+        return -1;
     char filep[256], tempp[256];                                //If we dont want to leave empty lines, the easiest method is just to copy
     snprintf(filep, sizeof(filep), "%s/treasures", huntID);     //all the information from the old file to the new one, and ignore the treasure
     snprintf(tempp, sizeof(tempp), "%s/treasures_tmp", huntID); //that we want to delete
@@ -252,7 +278,7 @@ int removeTreasure(char *huntID, char *treasureID)
     rename(tempp, filep); // Replace original file with the new one
     unlink(tempp);
     char logp[256];
-    snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt");
+    snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt.txt");
     int flog = open(logp, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (!flog)
         return -1;
