@@ -38,7 +38,6 @@ int createSymLink(char *huntID)
         return -1;
 }
 
-
 int addTreasure (char *huntID, char *inputFile)
 {
     Treasure_t treasure;
@@ -106,7 +105,12 @@ void listHunt(char *huntID)
 {
     struct stat st;
     if (stat(huntID, &st) != 0) 
-        printf("Nu exista hunt-ul %s\n", huntID);
+    {
+        char err[MAX_BUF];
+        snprintf(err, sizeof(err) - 1, "Hunt %s doesn't exist\n", huntID);
+        err[sizeof(err)] = '\0';
+        write(1, err, strlen(err));
+    }
     else
     {
         char filep[256];
@@ -118,8 +122,11 @@ void listHunt(char *huntID)
             char buff[MAX_BUF];
             long int eet_time = st.st_mtim.tv_sec + 3*3600;  //adjusts time according to EET
             strftime(buff, sizeof(buff), "%D %T", gmtime(&eet_time));
-            printf("Hunt name: %s, Total size: %ld bytes, Last modification: %s\n", huntID, st.st_size, buff);
+            char out[MAX_BUF*2];
             int bytes_read;
+            snprintf(out, sizeof(out) - 1, "Hunt name: %s, Total size: %ld bytes, Last modification: %s\n", huntID, st.st_size, buff);
+            out[sizeof(out)] = '\0';
+            write(1, out, strlen(out));
             while ((bytes_read = read(in, buff, sizeof(buff))))
                 write(1, buff, bytes_read); //1 represents the stdout, if necessary will change output to a different file
             char logp[256];
@@ -145,8 +152,13 @@ void listHunt(char *huntID)
 void viewTreasure(char *huntID, char *treasureID)
 {
     struct stat st;
+    char err[MAX_BUF];
     if (stat(huntID, &st) != 0) 
-        printf("Nu exista hunt-ul %s\n", huntID);
+    {
+        snprintf(err, sizeof(err) - 1, "Hunt %s doesn't exist\n", huntID);
+        err[sizeof(err)] = '\0';
+        write(1, err, strlen(err));
+    }
     char filep[256];
     snprintf(filep, sizeof(filep), "%s/%s", huntID, "treasures");
     int in = open(filep, O_RDONLY);
@@ -166,12 +178,16 @@ void viewTreasure(char *huntID, char *treasureID)
                 if (strcmp(id, treasureID) == 0) 
                 {
                     found = 1;
-                    printf("%s\n", line);
+                    write(1, line, strlen(line));
+                    write(1, "\n", 1);
                     for (int i = 0; i < 4; i++) 
                     {
                         line = strtok(NULL, "\n");
                         if (line) 
-                            printf("%s\n", line);
+                        {
+                            write(1, line, strlen(line));
+                            write(1, "\n", 1);
+                        }
                     }
                     break; //Also assumes there is only one treasure with a given ID
                 }          //If there can be multiple, just remove the break
@@ -179,7 +195,12 @@ void viewTreasure(char *huntID, char *treasureID)
             line = strtok(NULL, "\n");
         }
         if (!found)
-            printf("Treasure with ID %s not found in hunt %s.\n", treasureID, huntID);
+        {
+            snprintf(err, sizeof(err) - 1, "Treasure with ID %s not found in hunt %s.\n", treasureID, huntID);
+            err[sizeof(err)] = '\0';
+            write(1, err, strlen(err));
+        }
+            
         else
         {
             char logp[256];
@@ -296,47 +317,90 @@ int removeTreasure(char *huntID, char *treasureID)
 
 //For the logged_hunt maybe also add the time of each command
 //Also is it just the attempted operation? Or does it have to be successful? (for now, it has to be successful)
-//Maybe also make the functions return different values depending on type of error
 
 int main(int argc, char **argv)
 {
     char yes_no;
     int check = 1;
+    char err[MAX_BUF];
     if (strcmp(argv[1], "add") == 0)
     {
         check = addTreasure(argv[2], argv[3]);
         if (check == 0)
-            printf("Treasure added successfully to hunt %s\n", argv[2]);
+        {
+            snprintf(err, sizeof(err) - 1, "Treasure added successfully to hunt %s\n", argv[2]);
+            err[sizeof(err)] = '\0';
+            write(1, err, strlen(err));
+        }
+            
         else
-            printf("Error at adding treasure to hunt %s\n", argv[2]);
+        {
+            snprintf(err, sizeof(err) - 1, "Error at adding treasure to hunt %s\n", argv[2]);
+            err[sizeof(err)] = '\0';
+            write(1, err, strlen(err));
+        }
+           
     }
+    else
     if (strcmp(argv[1], "list") == 0)
         listHunt(argv[2]);
+    else
     if (strcmp(argv[1], "view") == 0)
         viewTreasure(argv[2], argv[3]);
+    else
     if(strcmp(argv[1], "remove_treasure") == 0)
+    {
+        check = removeTreasure(argv[2], argv[3]);
+        if(check == 0)
         {
-            check = removeTreasure(argv[2], argv[3]);
-            if(check == 0)
-                printf("Treasure %s removed successfully from hunt %s\n", argv[3], argv[2]);
-            else
-                printf("Error at removing treasure %s from hunt %s\n", argv[3], argv[2]);
+            snprintf(err, sizeof(err) - 1, "Treasure %s removed successfully from hunt %s\n", argv[3], argv[2]);
+            err[sizeof(err)] = '\0';
+            write(1, err, strlen(err));
         }
+        else
+        {
+            snprintf(err, sizeof(err) - 1, "Error at removing treasure %s from hunt %s\n", argv[3], argv[2]);
+            err[sizeof(err)] = '\0';
+            write(1, err, strlen(err));
+        }
+    }
+    else
     if (strcmp(argv[1], "remove_hunt") == 0)
     {
-        printf("Are you sure you want to delete hunt %s?\n [y/n]  ", argv[2]);
+        char question[MAX_BUF];
+        snprintf(question, sizeof(question) - 1, "Are you sure you want to delete hunt %s?\n [y/n]  ", argv[2]);
+        err[sizeof(question)] = '\0';
+        write(1, question, strlen(question));
         scanf("%c", &yes_no);
         if (yes_no == 'y')
         {
             check = removeHunt(argv[2]);
             if (check == 0)
-                printf("Hunt %s removed successfully\n", argv[2]);
+            {
+                snprintf(err, sizeof(err) - 1, "Hunt %s removed successfully\n", argv[2]);
+                err[sizeof(err)] = '\0';
+                write(1, err, strlen(err));
+            }
             else
-                printf("Error at removing hunt %s\n", argv[2]);
-
+            {
+                snprintf(err, sizeof(err) - 1, "Error at removing hunt %s\n", argv[2]);
+                err[sizeof(err)] = '\0';
+                write(1, err, strlen(err));
+            }
         }
         else
-            printf("Operation terminated\n");
+        {
+            snprintf(err, sizeof(err) - 1, "Operation terminated\n");
+            err[sizeof(err)] = '\0';
+            write(1, err, strlen(err));
+        }
+            
+    }
+    else
+    {
+        snprintf(err, sizeof(err) - 1, "Command not recognized\n");
+        err[sizeof(err)] = '\0';
+        write(1, err, strlen(err));
     }
     return 0;
 }
