@@ -235,9 +235,9 @@ int removeHunt (char *huntID)
         snprintf(logp, sizeof(logp), "%s/%s", huntID, "logged_hunt.txt");
         snprintf(linkp, sizeof(linkp), "%s-%s", "logged_hunt", huntID);
         unlink(filep);
-        unlink(logp);
-        unlink(linkp);
     }
+    unlink(logp);
+    unlink(linkp);
     closedir(dirp);
     rmdir(huntID);
     return 0;
