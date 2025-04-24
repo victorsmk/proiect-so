@@ -310,6 +310,31 @@ int removeTreasure(char *huntID, char *treasureID)
     return 0;
 }
 
+void listHunts()
+{
+    char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
+    DIR *dirp = opendir(cwd); 
+    if (dirp == NULL) 
+        return;
+    write(1, "Current hunts:\n", strlen("Current hunts:\n"));
+    struct dirent *entry;
+    struct stat statbuf;
+    while ((entry = readdir(dirp)) != NULL) 
+    {
+        char fullpath[MAX_BUF*2];
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, entry->d_name);
+        if (stat(fullpath, &statbuf) == -1) 
+            continue;
+        if (S_ISDIR(statbuf.st_mode) && entry->d_name[0] == 'h') 
+        {
+            write(1, entry->d_name, strlen(entry->d_name));
+            write(1, "\n", strlen("\n"));
+        }
+    }
+    closedir(dirp);
+}
+
 //Dont think its necessary to make the printing functions return anything on success,
 //taking into account the fact that they will print information on success and not print on failure.
 //However, if the functions will be changed to write in a different file,
@@ -347,6 +372,9 @@ int main(int argc, char **argv)
     else
     if (strcmp(argv[1], "view") == 0)
         viewTreasure(argv[2], argv[3]);
+    else
+    if (strcmp(argv[1], "list_all") == 0)
+        listHunts();
     else
     if(strcmp(argv[1], "remove_treasure") == 0)
     {
