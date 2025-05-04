@@ -19,7 +19,7 @@ void handle_sigterm()
     usleep(1000000);
     write(1, "[Monitor] Shutting down in 2 seconds...\n", strlen("[Monitor] Shutting down in 2 seconds...\n"));
     usleep(1000000);
-    write(1, "[Monitor] Shutting down in 1 seconds...\n", strlen("[Monitor] Shutting down in 1 seconds...\n"));
+    write(1, "[Monitor] Shutting down in 1 seconds...\n", strlen("[Monitor] Shutting down in 1 second...\n"));
     usleep(1000000);
     exit(0);
 }
@@ -44,7 +44,8 @@ void handle_sigusr2()
 {
     char buf[256];
     int in = open("monitor_data.txt", O_RDONLY);
-    if (in == -1) {
+    if (in == -1) 
+    {
         perror("data file");
         return;
     }
@@ -57,7 +58,7 @@ void handle_sigusr2()
         if (len > 0 && buf[len - 1] == '\n')
             buf[len - 1] = '\0';
 
-        write(1, "[Monitor] Viewing treasures...\n", strlen("[Monitor] Viewing treasures...\n"));
+        write(1, "[Monitor] Listing treasures...\n", strlen("[Monitor] Listing treasures...\n"));
         pid_t pid = fork();
         if (pid == 0) 
         {
@@ -73,6 +74,39 @@ void handle_sigusr2()
     }
 }
 
+void handle_sighup()
+{
+    char buf[256];
+    int in = open("monitor_data.txt", O_RDONLY);
+    if (in == -1) 
+    {
+        perror("data file");
+        return;
+    }
+    int n = read(in, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+    if (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+        buf[n - 1] = '\0';
+    close(in);
+    if (n > 0) 
+    {
+        char *hunt = strtok(buf, " \n");
+        char *treasure = strtok(NULL, " \n");
+        write(1, "[Monitor] Viewing treasure...\n", strlen("[Monitor] Viewing treasure...\n"));
+        pid_t pid = fork();
+        if (pid == 0) 
+        {
+            char *args[] = { "./treasure_manager", "view", hunt, treasure, NULL};
+            if ((execvp("./treasure_manager", args)) == -1)
+            {
+                perror("execvp failed");
+                exit(-1);
+            }
+            perror("execvp");
+            exit(0);
+        }
+    }
+}
 
 void run_monitor()
 {
@@ -86,6 +120,9 @@ void run_monitor()
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = &handle_sigusr2;
     sigaction(SIGUSR2, &sa, NULL);
+    memset(&sa, 0, sizeof(struct sigaction));
+    sa.sa_handler = &handle_sighup;
+    sigaction(SIGHUP, &sa, NULL);
     while (1) 
         pause(); //Waits until it receives a signal
 }
@@ -153,8 +190,8 @@ int main(void)
         {
             if (monitor_running)
             {
-                char *token = strtok(command, " ");
-                char *hunt = strtok(NULL, " ");
+                char *hunt = strtok(command, " ");
+                hunt = strtok(NULL, " ");
                 int in = open("monitor_data.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666); //Write the hunt that we want to print in a file
                 if (in == -1)                                                          //with a known name, to avoid using a global "command" variable
                 {
@@ -164,6 +201,27 @@ int main(void)
                 write(in, hunt, strlen(hunt));
                 close(in);
                 kill(monitor_pid, SIGUSR2);
+                usleep(500000);
+            }
+            else 
+                write(1, "Monitor is not running.\n", strlen("Monitor is not running.\n"));
+        }
+        else
+        if (strncmp(command, "view_treasure", 13) == 0)
+        {
+            if (monitor_running)
+            {
+                char *hunt = strtok(command, " ");
+                hunt = strtok(NULL, "\n");
+                int in = open("monitor_data.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666); 
+                if (in == -1)                                                          
+                {
+                    perror("monitor data file");
+                    exit(-1);
+                }
+                write(in, hunt, strlen(hunt));
+                close(in);
+                kill(monitor_pid, SIGHUP);
                 usleep(500000);
             }
             else 
