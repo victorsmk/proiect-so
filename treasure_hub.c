@@ -13,7 +13,7 @@ pid_t monitor_pid = -1;   //Uses these 3 parameters to track the monitor process
 int monitor_running = 0;  //much simpler than passing as parameters
 int stop_issued = 0;
 
-void handle_sigterm(int sig) 
+void handle_sigterm() 
 {
     write(1, "[Monitor] Shutting down in 3 seconds...\n", strlen("[Monitor] Shutting down in 3 seconds...\n"));
     usleep(1000000);
@@ -24,7 +24,7 @@ void handle_sigterm(int sig)
     exit(0);
 }
 
-void handle_sigusr1(int sig) 
+void handle_sigusr1()
 {
     write(1, "[Monitor] Listing hunts...\n", strlen("[Monitor] Listing hunts...\n"));
     pid_t pid = fork();
@@ -36,18 +36,56 @@ void handle_sigusr1(int sig)
             perror("execvp failed");
             exit(-1);
         }
+        exit(0);
     }
 }
+
+void handle_sigusr2()
+{
+    char buf[256];
+    int in = open("monitor_data.txt", O_RDONLY);
+    if (in == -1) {
+        perror("data file");
+        return;
+    }
+    int n = read(in, buf, sizeof(buf) - 1);
+    close(in);
+    if (n > 0) 
+    {
+        buf[n] = '\0';
+        int len = strlen(buf);
+        if (len > 0 && buf[len - 1] == '\n')
+            buf[len - 1] = '\0';
+
+        write(1, "[Monitor] Viewing treasures...\n", strlen("[Monitor] Viewing treasures...\n"));
+        pid_t pid = fork();
+        if (pid == 0) 
+        {
+            char *args[] = { "./treasure_manager", "list", buf, NULL };
+            if ((execvp("./treasure_manager", args)) == -1)
+            {
+                perror("execvp failed");
+                exit(-1);
+            }
+            perror("execvp");
+            exit(0);
+        }
+    }
+}
+
 
 void run_monitor()
 {
     struct sigaction sa;
-    sigemptyset(&sa.sa_mask); //Allows signal handler to process other signals while it's running
-    sa.sa_flags = SA_RESTART;  
+    memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = &handle_sigusr1;
     sigaction(SIGUSR1, &sa, NULL);
+    memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = &handle_sigterm;
     sigaction(SIGTERM, &sa, NULL);
+    memset(&sa, 0, sizeof(struct sigaction));
+    sa.sa_handler = &handle_sigusr2;
+    sigaction(SIGUSR2, &sa, NULL);
     while (1) 
         pause(); //Waits until it receives a signal
 }
@@ -76,30 +114,58 @@ int main(void)
             if (monitor_running) 
             {
                 write(1, "Monitor is already running\n", strlen("Monitor is already running\n"));
-                continue;
             }
-            monitor_pid = fork();
-            if (monitor_pid == 0)
-                run_monitor();
-            else 
-            if (monitor_pid > 0) 
+            else
             {
-                monitor_running = 1;
-                snprintf(buff, sizeof(buff) - 1,  "Monitor started, PID: %d\n", monitor_pid);
-                buff[sizeof(buff)] = '\0';
-                write(1, buff, strlen(buff));
-            } 
-            else 
-            {
-                perror("fork");
-                exit(1);
+                monitor_pid = fork();
+                if (monitor_pid == 0)
+                    run_monitor();
+                else 
+                if (monitor_pid > 0) 
+                {
+                    monitor_running = 1;
+                    snprintf(buff, sizeof(buff) - 1,  "Monitor started, PID: %d\n", monitor_pid);
+                    buff[sizeof(buff)] = '\0';
+                    write(1, buff, strlen(buff));
+                } 
+                else 
+                {
+                    perror("fork");
+                    exit(1);
+                }
             }
+            
         }
         else 
-        if (strcmp(command, "list_hunts") == 0) 
+        if (strcmp(command, "list_hunts") == 0)
         {
             if (monitor_running)
+            {
                 kill(monitor_pid, SIGUSR1);
+                usleep(500000);
+            }
+            else 
+                write(1, "Monitor is not running.\n", strlen("Monitor is not running.\n"));
+                
+        }
+        else
+        if (strncmp(command, "list_treasures", 14) == 0)
+        {
+            if (monitor_running)
+            {
+                char *token = strtok(command, " ");
+                char *hunt = strtok(NULL, " ");
+                int in = open("monitor_data.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666); //Write the hunt that we want to print in a file
+                if (in == -1)                                                          //with a known name, to avoid using a global "command" variable
+                {
+                    perror("monitor data file");
+                    exit(-1);
+                }
+                write(in, hunt, strlen(hunt));
+                close(in);
+                kill(monitor_pid, SIGUSR2);
+                usleep(500000);
+            }
             else 
                 write(1, "Monitor is not running.\n", strlen("Monitor is not running.\n"));
         }
