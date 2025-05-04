@@ -399,7 +399,8 @@ int main(int argc, char **argv)
         snprintf(question, sizeof(question) - 1, "Are you sure you want to delete hunt %s?\n [y/n]  ", argv[2]);
         err[sizeof(question)] = '\0';
         write(1, question, strlen(question));
-        scanf("%c", &yes_no);
+        if (read(0, &yes_no, 1) == -1) 
+            perror("read failed");
         if (yes_no == 'y')
         {
             check = removeHunt(argv[2]);
@@ -417,18 +418,10 @@ int main(int argc, char **argv)
             }
         }
         else
-        {
-            snprintf(err, sizeof(err) - 1, "Operation terminated\n");
-            err[sizeof(err)] = '\0';
-            write(1, err, strlen(err));
-        }
+            write(1, "Operation terminated\n", strlen("Operation terminated\n"));
             
     }
     else
-    {
-        snprintf(err, sizeof(err) - 1, "Command not recognized\n");
-        err[sizeof(err)] = '\0';
-        write(1, err, strlen(err));
-    }
+        write(1, "Command not recognized\n", strlen("Command not recognized\n"));
     return 0;
 }
