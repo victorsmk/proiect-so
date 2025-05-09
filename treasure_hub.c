@@ -7,20 +7,18 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/select.h>
 #define MAX_BUF 1024
 
 pid_t monitor_pid = -1;   //Uses these 3 parameters to track the monitor process globally,
 int monitor_running = 0;  //much simpler than passing as parameters
 int stop_issued = 0;
+int pipe_fd[2] = {-1, -1};
 
 void handle_sigterm() 
 {
     write(1, "[Monitor] Shutting down in 3 seconds...\n", strlen("[Monitor] Shutting down in 3 seconds...\n"));
-    usleep(1000000);
-    write(1, "[Monitor] Shutting down in 2 seconds...\n", strlen("[Monitor] Shutting down in 2 seconds...\n"));
-    usleep(1000000);
-    write(1, "[Monitor] Shutting down in 1 seconds...\n", strlen("[Monitor] Shutting down in 1 second...\n"));
-    usleep(1000000);
+    usleep(3000000);
     exit(0);
 }
 
@@ -127,17 +125,30 @@ void run_monitor()
         pause(); //Waits until it receives a signal
 }
 
-int main(void)
+void read_from_monitor() 
 {
-    //Creates an executable file to be used in the list and view functionalities of the treasure hub
-    char *compile_command = "gcc -Wall -o treasure_manager treasure_manager.c";
-    int ret = system(compile_command); 
-    if (ret) 
+    char output[MAX_BUF];
+    int n = read(pipe_fd[0], output, sizeof(output) - 1);
+    if (n > 0) 
     {
-        perror("Could not compile treasure_manager\n");
+        output[n] = '\0';
+        write(1, output, n);
+    }
+}
+
+void compile() //Creates an executable file to be used in the list and view functionalities of the treasure hub
+{
+    if (system("gcc -Wall -o treasure_manager treasure_manager.c") != 0) 
+    {
+        perror("compile");
         exit(-1);
     }
-    char command[256];
+}
+
+int main(void)
+{
+    compile();
+    char command[MAX_BUF];
     char buff[MAX_BUF];
     while(1) //Ensures the process doesn't terminate after one action and keeps waiting for signals
     {
@@ -154,12 +165,23 @@ int main(void)
             }
             else
             {
+                if (pipe(pipe_fd) == -1)
+                {
+                    perror("pipe");
+                    exit(-1);
+                }
                 monitor_pid = fork();
                 if (monitor_pid == 0)
+                {
+                    close(pipe_fd[0]);
+                    dup2(pipe_fd[1], STDOUT_FILENO);
+                    close(pipe_fd[1]);
                     run_monitor();
+                }
                 else 
                 if (monitor_pid > 0) 
                 {
+                    close(pipe_fd[1]);
                     monitor_running = 1;
                     snprintf(buff, sizeof(buff) - 1,  "Monitor started, PID: %d\n", monitor_pid);
                     buff[sizeof(buff)] = '\0';
@@ -180,6 +202,7 @@ int main(void)
             {
                 kill(monitor_pid, SIGUSR1);
                 usleep(500000);
+                read_from_monitor();
             }
             else 
                 write(1, "Monitor is not running.\n", strlen("Monitor is not running.\n"));
@@ -202,6 +225,7 @@ int main(void)
                 close(in);
                 kill(monitor_pid, SIGUSR2);
                 usleep(500000);
+                read_from_monitor();
             }
             else 
                 write(1, "Monitor is not running.\n", strlen("Monitor is not running.\n"));
@@ -223,6 +247,7 @@ int main(void)
                 close(in);
                 kill(monitor_pid, SIGHUP);
                 usleep(500000);
+                read_from_monitor();
             }
             else 
                 write(1, "Monitor is not running.\n", strlen("Monitor is not running.\n"));
@@ -233,9 +258,11 @@ int main(void)
             if (monitor_running && !stop_issued) 
             {
                 kill(monitor_pid, SIGTERM);
+                read_from_monitor();
                 stop_issued = 1;
                 waitpid(monitor_pid, NULL, 0);
-                write(1, "Monitor has stopped\n", strlen("Monitor has stopped\n"));
+                close(pipe_fd[0]);
+                write(1, "\nMonitor has stopped\n", strlen("\nMonitor has stopped\n"));
                 monitor_running = 0;
                 stop_issued = 0;
             }
